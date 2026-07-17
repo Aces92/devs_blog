@@ -41,9 +41,10 @@ async def user_registration(user: UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-@router.post("/Login")
-async def login(user:UserLogin, db:Session=(get_db)):
+@router.post("/login")
+async def login(user:UserLogin, db:Session= Depends(get_db)):
     email_exits = db.query(User).filter(User.email == user.email).first()
+
 
     if not email_exits:
         raise HTTPException(
