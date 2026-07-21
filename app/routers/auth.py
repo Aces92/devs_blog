@@ -1,5 +1,6 @@
 from fastapi  import APIRouter, HTTPException, status, Depends
-from app.utils.security import hash_password
+from app.utils.security import hash_password, verify_password
+from app.utils.jwt import create_access_token
 from app.schemas.schemas import UserCreate, UserResponse, UserLogin
 from app.database import get_db
 from app.models.user import User
@@ -25,11 +26,11 @@ async def user_registration(user: UserCreate, db: Session = Depends(get_db)):
 
     if username_exists:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_CONFLICT,
             detail="username already exists"
         )
 
-    hashed_password = hash_password(user.password),
+    hashed_password = hash_password(user.password)
     new_user = User(
     username=user.username,
     email=user.email,
@@ -42,13 +43,29 @@ async def user_registration(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(user:UserLogin, db:Session= Depends(get_db)):
-    email_exits = db.query(User).filter(User.email == user.email).first()
+async def login(user: UserLogin, db: Session = Depends(get_db)):
+    email_exists = db.query(User).filter(User.email == user.email).first()
 
-
-    if not email_exits:
+    if not email_exists:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail= "invalid username or password"
+            detail="invalid username or password"
         )
-        
+    print(email_exists.hashed_password)
+    print(type(email_exists.hashed_password))
+    if not verify_password(
+    user.password,
+    email_exists.hashed_password
+):
+     raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="invalid username or password"
+    )
+    access_token = create_access_token(
+        data={"user_id": email_exists.id}
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
