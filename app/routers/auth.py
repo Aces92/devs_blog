@@ -1,10 +1,11 @@
 from fastapi  import APIRouter, HTTPException, status, Depends
 from app.utils.security import hash_password, verify_password
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, get_current_user
 from app.schemas.schemas import UserCreate, UserResponse, UserLogin
 from app.database import get_db
 from app.models.user import User
 from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
 router = APIRouter(
     prefix="/auth",
@@ -43,18 +44,20 @@ async def user_registration(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(user: UserLogin, db: Session = Depends(get_db)):
-    email_exists = db.query(User).filter(User.email == user.email).first()
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    email_exists = db.query(User).filter(User.email == form_data.username).first()
 
     if not email_exists:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid username or password"
         )
-    print(email_exists.hashed_password)
-    print(type(email_exists.hashed_password))
+
     if not verify_password(
-    user.password,
+    form_data.password,
     email_exists.hashed_password
 ):
      raise HTTPException(
@@ -69,3 +72,9 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(
+    current_user: User = Depends(get_current_user)
+):
+    return current_user
