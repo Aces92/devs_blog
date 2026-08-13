@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 if TYPE_CHECKING:
-    from app.models.post import Post
+    from app.models.post import Post, Comment
 
 
 
@@ -19,4 +19,5 @@ class User(Base):
     hashed_password: Mapped[str] =mapped_column(String(255))
     created_at:Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     posts: Mapped[list["Post"]] = relationship("Post",back_populates="owner")
+    comments: Mapped[list["Comment"]] = relationship("Comment", back_populates="owner")
 

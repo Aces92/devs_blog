@@ -11,7 +11,8 @@ router = APIRouter(
     tags=["Posts"]
 )
 
-
+#full crud operations 
+# creating a new post
 @router.post("/", response_model=PostResponse)
 async def create_posts(post:PostCreate, db: Session = Depends(get_db),
 current_user:User = Depends(get_current_user)):
@@ -24,14 +25,14 @@ current_user:User = Depends(get_current_user)):
     db.refresh(new_post)
     return new_post
 
-
+#Getting all posts
 @router.get("/", response_model=list[PostResponse])
 async def get_posts(db: Session = Depends(get_db)):
     posts = db.query(Post).all()
     
     return posts
 
-
+#Getting a specific post 
 @router.get("/{id}", response_model=PostResponse)
 async def get_post(id: int, db: Session = Depends(get_db)):
     post = db.query(Post).filter(Post.id == id).first()
@@ -44,6 +45,7 @@ async def get_post(id: int, db: Session = Depends(get_db)):
 
     return post
 
+#Updating a post
 @router.put("/{id}", response_model=PostResponse)
 async def update_post(id:int, updated_post : PostCreate, db: Session = Depends(get_db),
                       current_user : User = Depends(get_current_user)):
@@ -66,6 +68,7 @@ async def update_post(id:int, updated_post : PostCreate, db: Session = Depends(g
 
     return post
 
+#Deleting a post
 @router.delete("/{id}")
 async def delete_post(id: int, db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
@@ -89,3 +92,4 @@ async def delete_post(id: int, db: Session = Depends(get_db),
     return {
     "message": "Post deleted successfully."
 }
+
