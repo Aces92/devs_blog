@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from app.database import get_db
-from app.models.post import Post, Comment
 from app.models.user import User
-from app.schemas.schemas import CommentCreate, CommentResponse, PostResponse
+from app.models.post import Post, Comment
+from app.schemas.schemas import CommentCreate, CommentResponse
 from app.utils.jwt import get_current_user
 
 router = APIRouter(
@@ -11,23 +14,24 @@ router = APIRouter(
     tags=["Comments"]
 )
 
-#creating comments for a post 
-@router.post("/{post_id}/comments", response_model=CommentResponse)
+
+@router.post("/{post_id}/comments", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     post_id: int,
     comment: CommentCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    #querying the database for checking if the posts exists or not 
-    post = db.query(Post).filter(Post.id == post_id).first() 
+    # Check if post exists
+    result = await db.execute(select(Post).where(Post.id == post_id))
+    post = result.scalar_one_or_none()
 
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found"
         )
-#Adding a new comment on the database 
+
     new_comment = Comment(
         content=comment.content,
         owner_id=current_user.id,
@@ -35,89 +39,99 @@ async def create_comment(
     )
 
     db.add(new_comment)
-    db.commit()
-    db.refresh(new_comment)
+    await db.commit()
+    await db.refresh(new_comment)
 
-    return new_comment
+    # Reload with owner
+    result = await db.execute(
+        select(Comment)
+        .where(Comment.id == new_comment.id)
+        .options(selectinload(Comment.owner))
+    )
+    return result.scalar_one()
 
-#getting all comments from a post
+
 @router.get("/{post_id}/comments", response_model=list[CommentResponse])
-async def get_all(
+async def get_all_comments(
     post_id: int,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    #db query for all comments
-    comments = db.query(Comment).filter(Comment.post_id == post_id).all() 
+    result = await db.execute(
+        select(Comment)
+        .where(Comment.post_id == post_id)
+        .options(selectinload(Comment.owner))
+        .order_by(Comment.created_at.desc())
+    )
+    comments = result.scalars().all()
 
     if not comments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Comments not found"
+            detail="No comments found for this post"
         )
 
     return comments
 
-#updating route for comments
-@router.patch("/{update}", response_model=CommentResponse)
-async def update_comment(comment_id: int, updated_comment: CommentCreate, db: Session = Depends(get_db),
-                         current_user: User = Depends(get_current_user)):
 
-    comments = db.query(Comment).filter(Comment.id == comment_id).first()  #database query for existing comment
+@router.patch("/comments/{comment_id}", response_model=CommentResponse)
+async def update_comment(
+    comment_id: int,
+    updated_comment: CommentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(Comment)
+        .where(Comment.id == comment_id)
+        .options(selectinload(Comment.owner))
+    )
+    comment = result.scalar_one_or_none()
 
-    if not comments:
+    if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail= "comment not found"
+            detail="Comment not found"
         )
 
-    if current_user.id != comments.owner_id: #ownership checks for comments
+    if current_user.id != comment.owner_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Not allowed"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to update this comment"
         )
-    comments.content = updated_comment.content  # updating comments
 
-    db.commit()
-    db.refresh(comments)
+    comment.content = updated_comment.content
 
-    return comments
+    await db.commit()
+    await db.refresh(comment)
 
-#deleting route for comments
-@router.delete("/{post_id}/comments/{comment_id}")
-async def delete(id: int, current_user: User = Depends(get_current_user),
-                  db: Session = Depends(get_db)):
-    
-    comments = db.query(Comment).filter(Comment.id == id).first() #database query for existing comments
+    return comment
 
-    if not comments:
+
+@router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    comment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(Comment).where(Comment.id == comment_id))
+    comment = result.scalar_one_or_none()
+
+    if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail='comment not found'
+            detail="Comment not found"
         )
 
-    if current_user.id  != comments.owner_id: #ownership checks
+    if current_user.id != comment.owner_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST ,
-            detail= " Not authorized"
-            )
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this comment"
+        )
 
-    db.delete(comments)
-    db.commit()
+    await db.delete(comment)
+    await db.commit()
 
     return {
         "message": "Comment successfully deleted"
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
 

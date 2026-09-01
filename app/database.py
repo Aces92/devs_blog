@@ -1,5 +1,5 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import  DeclarativeBase
 from dotenv import load_dotenv
 
 import os
@@ -9,22 +9,19 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL") #getting the database url or connection from the environment vars
 
 #creating a database engine
-engine = create_engine(DATABASE_URL)
+engine = create_async_engine(DATABASE_URL)
 
 #creating a database session for each request
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
 class Base(DeclarativeBase):
     pass
 
 #a function that executes one db request at a time
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session

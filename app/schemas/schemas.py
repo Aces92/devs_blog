@@ -23,7 +23,7 @@ class UserLogin(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
 
 
 class PostCreate(BaseModel):
